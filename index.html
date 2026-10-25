@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>通勤費請求書アプリ</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Zen+Old+Mincho:wght@600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+/* 入力（上）→ A5横の用紙プレビュー（下）。用紙は実寸794×559px＝210×148mm */
+:root{
+  --bg:#f3f1ec; --panel:#ffffff; --ink:#24211c; --muted:#6f685c; --line:#d9d3c7;
+  --accent:#8a4b1f; --accent-soft:#f4e7dc; --ok:#2e6b3e;
+  --ui:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+  --title:"Zen Old Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:15px}
+.wrap{max-width:900px;margin:0 auto;padding:20px max(16px,env(safe-area-inset-right)) 60px max(16px,env(safe-area-inset-left))}
+header h1{font-family:var(--title);font-size:22px;margin:0 0 4px;letter-spacing:.06em}
+header p{margin:0 0 18px;color:var(--muted);font-size:13px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.card h2{font-size:13px;letter-spacing:.12em;color:var(--accent);margin:0 0 12px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.grid.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:600px){.grid,.grid.c4{grid-template-columns:repeat(2,minmax(0,1fr))}.full-sm{grid-column:1/-1}}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+input,select,textarea{width:100%;font:inherit;font-size:16px;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+.full{grid-column:1/-1}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:8px 14px;cursor:pointer;background:#fff;font:inherit;font-size:14px;color:var(--ink)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.months{display:flex;gap:6px;margin-top:10px}
+.months[hidden]{display:none!important}
+.total{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.total b{font-size:22px;font-variant-numeric:tabular-nums}
+.st{position:relative}
+.sug{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--line);border-radius:7px;box-shadow:0 6px 18px rgba(0,0,0,.12);max-height:240px;overflow:auto;margin-top:2px}
+.sug div{padding:9px 10px;cursor:pointer;font-size:14px;border-bottom:1px solid #f0ece4}
+.sug div:hover,.sug div.act{background:var(--accent-soft)}
+.sug small{color:var(--muted);margin-left:6px}
+.lines{font-size:11px;color:var(--muted);margin-top:4px;min-height:14px}
+.arrow{display:flex;align-items:end;justify-content:center;padding-bottom:10px;color:var(--muted)}
+.route{display:grid;grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr);gap:6px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}
+.btn{font:inherit;font-size:15px;padding:12px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;font-weight:700}
+.btn.sub{background:#fff;color:var(--accent)}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--muted);font-weight:400}
+.hint{font-size:12px;color:var(--muted)}
+.msg{font-size:13px;color:var(--ok);min-height:18px}
+/* プレビュー */
+.pv-outer{overflow:hidden;background:#cfc9bd;border-radius:10px;padding:12px}
+.pv-scale{transform-origin:top left}
+/* ===== 用紙 ===== */
+.sheet{width:794px;height:559px;background:#fff;color:#111;font-family:var(--ui);padding:34px 40px 22px;position:relative}
+.sheet .ttl{display:flex;justify-content:space-between;align-items:end;margin-bottom:4px}
+.sheet .ttl h3{margin:0;font-family:var(--title);font-size:23px;font-weight:600;letter-spacing:.04em}
+.sheet .ttl .rd{font-size:12px;font-weight:700}
+.sheet .rd span{display:inline-block;min-width:34px;text-align:right}
+.sheet table{width:100%;border-collapse:collapse;border:2px solid #222;table-layout:fixed}
+.sheet td{border:1.4px solid #222;padding:2px 6px;font-size:12.5px;vertical-align:middle;height:32px}
+.sheet .h{background:#e9e9e9;text-align:center;letter-spacing:.6em;font-size:13px}
+.sheet .h.tight{letter-spacing:.25em;line-height:1.35}
+.sheet .v{font-size:14px;font-weight:700}
+.sheet .ctr{text-align:center}
+.sheet .box{display:inline-block;width:11px;height:11px;border:1.2px solid #222;vertical-align:-1px;margin-right:4px;position:relative}
+.sheet .box.x::after{content:"✓";position:absolute;left:0;top:-5px;font-size:14px;font-weight:700}
+.sheet .kind{display:flex;justify-content:space-between;font-size:12.5px;padding-right:10px}
+.sheet .yen{display:flex;flex-direction:column;justify-content:space-between;height:84px;padding:2px 0}
+.sheet .yen .n{text-align:right;font-size:17px;font-weight:700;padding-right:18px;margin-top:30px;font-variant-numeric:tabular-nums}
+.sheet .yen .u{text-align:right;font-size:12px}
+.sheet .note{font-size:10px;line-height:2.3}
+.sheet .sum{text-align:right;font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
+.sheet .stamp{height:62px}
+.sheet .seal{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:15px;height:15px;border:1px solid #888;border-radius:50%;font-size:9px;line-height:13px;text-align:center;color:#888}
+.sheet .brand{position:absolute;right:42px;bottom:12px;font-size:10px;letter-spacing:.1em}
+.sheet .brand b{font-family:var(--title);font-size:15px;margin-left:3px}
+@media print{
+  @page{size:A5 landscape;margin:0}
+  body{background:#fff}
+  .wrap>*:not(#pvCard){display:none!important}
+  #pvCard{padding:0;border:0;margin:0;background:#fff}
+  #pvCard h2{display:none}
+  .pv-outer{padding:0;background:#fff;border-radius:0}
+  .pv-scale{transform:none!important;height:auto!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>通勤費請求書</h1>
+  <p>入力すると下の用紙に反映されます。A5横（A4の半分）でPDF保存できます。</p>
+</header>
+
+<div class="card">
+  <h2>請求者</h2>
+  <div class="grid">
+    <div><label for="reqDate">請求日</label><input type="date" id="reqDate"></div>
+    <div><label for="name">氏名</label><input id="name" placeholder="例：鳴門 太郎"></div>
+    <div><label for="dept">所属部署</label><input id="dept" placeholder="例：桃谷本店" list="deptList">
+      <datalist id="deptList"><option value="桃谷本店"><option value="上本町店"><option value="今里店"><option value="本社"></datalist></div>
+    <div><label for="empNo">社員番号</label><input id="empNo" inputmode="numeric"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>種別・期間</h2>
+  <div class="chips" id="kinds">
+    <button type="button" class="chip" data-k="切符">切符</button>
+    <button type="button" class="chip" data-k="回数券">回数券</button>
+    <button type="button" class="chip" data-k="バス">バス</button>
+    <button type="button" class="chip on" data-k="定期">定期</button>
+    <button type="button" class="chip" data-k="その他">その他</button>
+  </div>
+  <div class="months" id="months">
+    <button type="button" class="chip on" data-m="1">1ヶ月</button>
+    <button type="button" class="chip" data-m="3">3ヶ月</button>
+    <button type="button" class="chip" data-m="6">6ヶ月</button>
+  </div>
+  <div class="grid" style="margin-top:12px">
+    <div><label for="from">期間（開始）</label><input type="date" id="from"></div>
+    <div><label for="to">期間（終了）</label><input type="date" id="to"></div>
+  </div>
+  <p class="hint" id="toHint">定期は開始日を入れると終了日が自動で入ります。</p>
+</div>
+
+<div class="card">
+  <h2>区間</h2>
+  <div class="route">
+    <div class="st"><label for="stA">乗車駅</label><input id="stA" autocomplete="off" placeholder="駅名を入力"><div class="sug" id="sugA" hidden></div><div class="lines" id="linesA"></div></div>
+    <div class="arrow">〜</div>
+    <div class="st"><label for="stB">降車駅</label><input id="stB" autocomplete="off" placeholder="駅名を入力"><div class="sug" id="sugB" hidden></div><div class="lines" id="linesB"></div></div>
+  </div>
+  <div style="margin-top:10px"><label for="via">経由（任意）</label><input id="via" placeholder="例：鶴橋乗換"></div>
+  <p class="hint">2文字ほど入れると候補が出ます（全国の駅を検索）。運賃は乗換案内で確認して下の金額に入れてください。</p>
+</div>
+
+<div class="card">
+  <h2>金額（円）</h2>
+  <div class="grid c4">
+    <div><label for="aJR">JR</label><input id="aJR" inputmode="numeric"></div>
+    <div><label for="aSub">地下鉄</label><input id="aSub" inputmode="numeric"></div>
+    <div><label for="aPri">私鉄</label><input id="aPri" inputmode="numeric"></div>
+    <div><label for="aOth">その他</label><input id="aOth" inputmode="numeric"></div>
+  </div>
+  <div class="total"><span>合計請求金額</span><b id="sumUi">0 円</b></div>
+</div>
+
+<div class="card">
+  <h2>備考</h2>
+  <textarea id="memo" rows="2" placeholder="例：定期券コピー添付"></textarea>
+</div>
+
+<div class="actions">
+  <button class="btn" id="pdfBtn">PDFを保存（A5横）</button>
+  <button class="btn sub" id="printBtn">印刷</button>
+  <button class="btn ghost" id="clearBtn">区間・金額をクリア</button>
+</div>
+<div class="msg" id="msg"></div>
+
+<div class="card" id="pvCard">
+  <h2>プレビュー</h2>
+  <div class="pv-outer"><div class="pv-scale" id="pvScale">
+  <div class="sheet" id="sheet">
+    <div class="ttl"><h3>【通勤費請求書】</h3>
+      <div class="rd">請求日：<span id="pRy"></span> 年 <span id="pRm"></span> 月 <span id="pRd"></span> 日</div></div>
+    <table>
+      <colgroup><col style="width:17%"><col style="width:20.5%"><col style="width:20.5%"><col style="width:20.5%"><col style="width:21.5%"></colgroup>
+      <tr><td class="h tight">所属部署<br>社員番号</td>
+        <td colspan="2" class="v" style="line-height:1.4"><span id="pDept"></span><br><span id="pEmp" style="font-size:12px"></span></td>
+        <td class="h">氏名</td><td class="v" style="position:relative"><span id="pName"></span><span class="seal">印</span></td></tr>
+      <tr><td class="h">期間</td><td colspan="4" class="ctr v" id="pPeriod"></td></tr>
+      <tr><td class="h">区間</td><td colspan="4" class="ctr v" id="pRoute"></td></tr>
+      <tr><td class="h">種別</td><td colspan="4"><div class="kind" id="pKind"></div></td></tr>
+      <tr><td class="h" rowspan="2">金額</td>
+        <td class="ctr" style="letter-spacing:2em;padding-left:2em">JR</td><td class="ctr" style="letter-spacing:1.2em">地下鉄</td>
+        <td class="ctr" style="letter-spacing:1.6em">私鉄</td><td class="ctr" style="letter-spacing:1.2em">その他</td></tr>
+      <tr><td><div class="yen"><div class="n" id="pJR"></div><div class="u">円</div></div></td>
+        <td><div class="yen"><div class="n" id="pSub"></div><div class="u">円</div></div></td>
+        <td><div class="yen"><div class="n" id="pPri"></div><div class="u">円</div></div></td>
+        <td><div class="yen"><div class="n" id="pOth"></div><div class="u">円</div></div></td></tr>
+      <tr><td class="h">注意事項</td>
+        <td colspan="2" class="note">・定期代の請求の際は、定期のコピーを添付して下さい。<br>・所属長の承認印がない場合は、受理できません。</td>
+        <td class="ctr" style="font-weight:700;letter-spacing:.1em">合計請求金額</td>
+        <td><div class="sum"><span id="pSum"></span> 円</div></td></tr>
+    </table>
+    <table style="border-top:0;margin-top:-2px">
+      <colgroup><col style="width:17%"><col style="width:41%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup>
+      <tr><td class="h" rowspan="2" style="height:90px">備考</td><td rowspan="2" id="pMemo" style="font-size:12px;vertical-align:top;padding-top:6px"></td>
+        <td class="ctr" style="height:20px;font-size:12px">経理部</td><td class="ctr" style="font-size:12px">総務部</td><td class="ctr" style="font-size:12px">所属長</td></tr>
+      <tr><td class="stamp"></td><td class="stamp"></td><td class="stamp"></td></tr>
+    </table>
+    <div class="brand">パン工房<b>鳴門屋</b></div>
+  </div>
+  </div></div>
+</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const KINDS=["切符","回数券","バス","定期","その他"];
+let kind="定期", months=1;
+
+/* ---- 大阪近郊の駅（候補の即時表示用） ---- */
+const LOCAL=("桃谷,鶴橋,大阪上本町,今里,天王寺,大阪阿部野橋,寺田町,玉造,森ノ宮,大阪城公園,京橋,桜ノ宮,天満,大阪,梅田,大阪梅田,東梅田,西梅田,北新地,福島,野田,西九条,弁天町,大正,芦原橋,今宮,新今宮,動物園前,天下茶屋,難波,なんば,大阪難波,近鉄日本橋,日本橋,心斎橋,四ツ橋,長堀橋,本町,堺筋本町,谷町四丁目,谷町六丁目,谷町九丁目,谷町九丁目,四天王寺前夕陽ケ丘,天満橋,北浜,淀屋橋,南森町,扇町,東三国,新大阪,西中島南方,中津,肥後橋,西長堀,桜川,阿波座,九条,ドーム前千代崎,西大橋,松屋町,恵美須町,阿倍野,文の里,昭和町,西田辺,長居,あびこ,北花田,新金岡,なかもず,中百舌鳥,今里,緑橋,深江橋,高井田,長田,新深江,小路,北巽,南巽,平野,喜連瓜破,出戸,八尾南,関目高殿,野江内代,都島,蒲生四丁目,鴫野,今福鶴見,横堤,鶴見緑地,門真南,布施,河内永和,河内小阪,八戸ノ里,東花園,河内花園,瓢箪山,俊徳道,長瀬,弥刀,久宝寺口,近鉄八尾,河内山本,高安,今川,針中野,矢田,河内天美,布忍,高見ノ里,河内松原,恵我ノ荘,藤井寺,古市,美章園,南田辺,鶴ケ丘,我孫子町,杉本町,浅香,堺市,三国ケ丘,百舌鳥,上野芝,津久野,鳳,放出,高井田中央,JR河内永和,JR俊徳道,JR長瀬,新加美,加美,久宝寺,八尾,志紀,柏原,鶴橋,城東貨物,住吉大社,岸里玉出,天下茶屋,粉浜,住吉公園,住ノ江,七道,堺,堺東,三国ヶ丘,北野田,金剛,河内長野,萩ノ茶屋,今池,大阪上本町,大阪難波,近鉄奈良,生駒,学園前,大和西大寺,京都,三ノ宮,神戸三宮,尼崎,西宮,芦屋,十三,淡路,北千里,茨木,高槻,枚方市,守口市,門真市,寝屋川市,香里園,江坂,千里中央,桃山台,緑地公園")
+  .split(",").filter((v,i,a)=>a.indexOf(v)===i);
+
+/* ---- 全国駅検索（HeartRails Express API / JSONP） ---- */
+let cbN=0;
+function jsonp(url){return new Promise((res,rej)=>{const cb="__hr"+(++cbN);const s=document.createElement("script");
+  const t=setTimeout(()=>{cleanup();rej("timeout")},5000);
+  function cleanup(){clearTimeout(t);delete window[cb];s.remove()}
+  window[cb]=d=>{cleanup();res(d)};s.onerror=()=>{cleanup();rej("err")};
+  s.src=url+"&jsonp="+cb;document.head.appendChild(s);});}
+const cache={};
+async function stationLines(name){
+  if(cache[name]) return cache[name];
+  try{const d=await jsonp("https://express.heartrails.com/api/json?method=getStations&name="+encodeURIComponent(name));
+    const st=(d.response&&d.response.station)||[]; cache[name]=st; return st;}catch(e){return null}
+}
+
+function setupStation(inp,box,linesEl){
+  let act=-1, items=[], timer;
+  function render(list){items=list;act=-1;
+    if(!list.length){box.hidden=true;return}
+    box.innerHTML=list.map((s,i)=>`<div data-i="${i}">${s.name}<small>${s.sub||""}</small></div>`).join("");box.hidden=false;}
+  function pick(i){const s=items[i];if(!s)return;inp.value=s.name;box.hidden=true;showLines(s.name);update();save();}
+  async function showLines(n){linesEl.textContent="";if(!n)return;
+    const st=await stationLines(n);
+    if(st&&st.length){const ls=[...new Set(st.map(x=>x.line))];linesEl.textContent=ls.slice(0,4).join("・")+(ls.length>4?" ほか":"");}}
+  inp.addEventListener("input",()=>{
+    const q=inp.value.trim().replace(/駅$/,"");update();save();
+    if(!q){box.hidden=true;return}
+    const loc=LOCAL.filter(n=>n.startsWith(q)).concat(LOCAL.filter(n=>!n.startsWith(q)&&n.includes(q))).slice(0,8).map(n=>({name:n,sub:"大阪近郊"}));
+    render(loc);
+    clearTimeout(timer);timer=setTimeout(async()=>{
+      const st=await stationLines(q);
+      if(st&&st.length&&inp.value.trim().replace(/駅$/,"")===q){
+        const byName={};st.forEach(x=>{(byName[x.name]=byName[x.name]||[]).push(x.line)});
+        const api=Object.keys(byName).map(n=>({name:n,sub:byName[n].slice(0,3).join("・")+(byName[n].length>3?"…":"")}));
+        const merged=api.concat(loc.filter(l=>!byName[l.name]));render(merged.slice(0,10));}
+    },350);
+  });
+  inp.addEventListener("keydown",e=>{if(box.hidden)return;const ds=box.children;
+    if(e.key==="ArrowDown"){act=Math.min(act+1,ds.length-1);e.preventDefault()}
+    else if(e.key==="ArrowUp"){act=Math.max(act-1,0);e.preventDefault()}
+    else if(e.key==="Enter"){if(act>=0){pick(act);e.preventDefault()}return}
+    else if(e.key==="Escape"){box.hidden=true;return}else return;
+    [...ds].forEach((d,i)=>d.classList.toggle("act",i===act));});
+  box.addEventListener("mousedown",e=>{const d=e.target.closest("[data-i]");if(d){e.preventDefault();pick(+d.dataset.i)}});
+  inp.addEventListener("blur",()=>{setTimeout(()=>box.hidden=true,150);showLines(inp.value.trim().replace(/駅$/,""))});
+  return showLines;
+}
+const linesA=setupStation($("stA"),$("sugA"),$("linesA"));
+const linesB=setupStation($("stB"),$("sugB"),$("linesB"));
+
+/* ---- 日付 ---- */
+const pad=n=>String(n).padStart(2,"0");
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+function parts(v){if(!v)return["","",""];const[y,m,d]=v.split("-");return[y,+m,+d]}
+function autoTo(){if(kind!=="定期"||!$("from").value)return;
+  const[y,m,d]=$("from").value.split("-").map(Number);
+  const e=new Date(y,m-1+months,d);e.setDate(e.getDate()-1);$("to").value=iso(e);}
+
+/* ---- 金額 ---- */
+const amtIds=["aJR","aSub","aPri","aOth"];
+const num=v=>parseInt(String(v).replace(/[^\d]/g,""),10)||0;
+const yen=n=>n?n.toLocaleString("ja-JP"):"";
+
+/* ---- プレビュー更新 ---- */
+function update(){
+  const[ry,rm,rd]=parts($("reqDate").value);$("pRy").textContent=ry;$("pRm").textContent=rm;$("pRd").textContent=rd;
+  $("pDept").textContent=$("dept").value;$("pEmp").textContent=$("empNo").value?"No. "+$("empNo").value:"";
+  $("pName").textContent=$("name").value;
+  const f=parts($("from").value),t=parts($("to").value);
+  const ds=p=>`${p[0]||"　　"} 年 ${p[1]||"　"} 月 ${p[2]||"　"} 日`;
+  $("pPeriod").textContent=ds(f)+"　　〜　　"+ds(t);
+  const a=$("stA").value.trim(),b=$("stB").value.trim(),via=$("via").value.trim();
+  $("pRoute").textContent=(a||b)?`${a}${a&&!/駅$/.test(a)?"駅":""}　〜　${b}${b&&!/駅$/.test(b)?"駅":""}${via?"（"+via+"）":""}`:"〜";
+  const bx=k=>`<span><span class="box${kind===k?" x":""}"></span>`;
+  const mStr=[1,3,6].map(m=>kind==="定期"&&months===m?`<b style="border:1.2px solid #222;border-radius:50%;padding:0 3px">${m}</b>`:m).join("・");
+  $("pKind").innerHTML=`${bx("切符")}切符</span>${bx("回数券")}回数券</span>${bx("バス")}バス</span>${bx("定期")}定期（${mStr} ヶ月）</span>${bx("その他")}その他</span>`;
+  const ps=["pJR","pSub","pPri","pOth"];let sum=0;
+  amtIds.forEach((id,i)=>{const n=num($(id).value);sum+=n;$(ps[i]).textContent=yen(n)});
+  $("pSum").textContent=yen(sum);$("sumUi").textContent=sum.toLocaleString("ja-JP")+" 円";
+  $("pMemo").textContent=$("memo").value;
+  $("months").hidden=kind!=="定期";$("toHint").hidden=kind!=="定期";
+}
+
+/* ---- 保存（この端末に記憶） ---- */
+const KEY="tsukinhi_v1";
+const fields=["name","dept","empNo","stA","stB","via","aJR","aSub","aPri","aOth","memo","from","to"];
+function save(){try{const o={kind,months};fields.forEach(f=>o[f]=$(f).value);localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}}
+function load(){try{const o=JSON.parse(localStorage.getItem(KEY)||"null");if(!o)return false;
+  fields.forEach(f=>{if(o[f]!=null)$(f).value=o[f]});kind=o.kind||kind;months=o.months||months;return true}catch(e){return false}}
+
+function syncChips(){document.querySelectorAll("#kinds .chip").forEach(c=>c.classList.toggle("on",c.dataset.k===kind));
+  document.querySelectorAll("#months .chip").forEach(c=>c.classList.toggle("on",+c.dataset.m===months));}
+$("kinds").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;kind=c.dataset.k;syncChips();autoTo();update();save()});
+$("months").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;months=+c.dataset.m;syncChips();autoTo();update();save()});
+$("from").addEventListener("change",()=>{autoTo();update();save()});
+["reqDate","name","dept","empNo","to","via","memo",...amtIds].forEach(id=>$(id).addEventListener("input",()=>{update();save()}));
+amtIds.forEach(id=>$(id).addEventListener("blur",()=>{const n=num($(id).value);$(id).value=n?n.toLocaleString("ja-JP"):""}));
+
+$("clearBtn").addEventListener("click",()=>{["stA","stB","via",...amtIds,"memo"].forEach(f=>$(f).value="");
+  $("linesA").textContent="";$("linesB").textContent="";update();save();flash("区間・金額をクリアしました")});
+
+/* ---- 縮小表示 ---- */
+function fit(){const outer=$("pvScale").parentElement;const w=outer.clientWidth-24;const s=Math.min(1,w/794);
+  $("pvScale").style.transform=`scale(${s})`;$("pvScale").style.height=(559*s)+"px";}
+window.addEventListener("resize",fit);
+
+/* ---- PDF出力 ---- */
+function flash(t){$("msg").textContent=t;setTimeout(()=>{if($("msg").textContent===t)$("msg").textContent=""},4000)}
+$("pdfBtn").addEventListener("click",async()=>{
+  if(!window.html2canvas||!window.jspdf){flash("PDF機能を読み込めませんでした。ネット接続を確認するか「印刷」からPDF保存してください。");return}
+  $("pdfBtn").disabled=true;flash("PDFを作成中…");
+  const clone=$("sheet").cloneNode(true);clone.removeAttribute("id");
+  const holder=document.createElement("div");holder.style.cssText="position:fixed;left:-10000px;top:0";holder.appendChild(clone);document.body.appendChild(holder);
+  try{
+    await document.fonts.ready;
+    const cv=await html2canvas(clone,{scale:3,backgroundColor:"#ffffff"});
+    const pdf=new window.jspdf.jsPDF({orientation:"landscape",unit:"mm",format:"a5"});
+    pdf.addImage(cv.toDataURL("image/jpeg",0.95),"JPEG",0,0,210,148);
+    const ym=($("from").value||iso(new Date())).slice(0,7).replace("-","");
+    pdf.save(`通勤費請求書_${$("name").value||"未記入"}_${ym}.pdf`);
+    flash("PDFを保存しました");
+  }catch(e){flash("PDFの作成に失敗しました。「印刷」からPDF保存をお試しください。")}
+  finally{holder.remove();$("pdfBtn").disabled=false}
+});
+$("printBtn").addEventListener("click",()=>window.print());
+
+/* ---- 初期化 ---- */
+$("reqDate").value=iso(new Date());
+if(!load()){const n=new Date();$("from").value=iso(new Date(n.getFullYear(),n.getMonth()+1,1));autoTo();}
+syncChips();update();fit();
+if($("stA").value)linesA($("stA").value);if($("stB").value)linesB($("stB").value);
+</script>
+</body>
+</html>
